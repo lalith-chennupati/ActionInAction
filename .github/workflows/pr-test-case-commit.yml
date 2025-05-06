@@ -3,36 +3,46 @@ name: PR Test Case and Commit Service Integration
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   test-case-and-commit:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Set Multiple Environment Variables
+        run: |
+         echo "GIT_KEY_TOKEN=Z2l0aHViX3BhdF8xMUFOU01SV0EwOVlNV25pWUFFVDV6X0JUTFhlYm02dFk4YVZIeUZPbEZ5UG9TT3NaNEJyYXg2dTlqZDBHMDNFdmY0WUQ2M0ZUV3BvSXIzbVBC" >> $GITHUB_ENV
+         echo "AI_KEY=c2stcHJvai1FTUNuYUl3aGRZLXFRa25hUk9XUHVTa1RtazlBNFFwQmVYRmhqQk9Hc01tSWxiYl9KVGNiXzBLblBHZHVUd0M4Q1FEVjB4TXBYV1QzQmxia0ZKMVo2MXA1VllLMnp4OThBTjdVRnJraW9Pb3RqQVZOcXVRdzZZc0VXeEhkRTJ2aFRsZURXRjNmNWpTUUplNWZMczlhT1EzX2lQY0E=" >> $GITHUB_ENV
 
-    - name: Set up JDK
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Cache Gradle dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.gradle/caches
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
-    - name: Build the project
-      run: ./gradlew build
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
-    - name: Run PRTestCaseService and PRCommitService
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        AI_API_KEY: ${{ secrets.AI_API_KEY }}
-      run: |
-        ./gradlew run --args="fetchPRChanges ${{ github.repository_owner }} ${{ github.event.repository.name }} ${{ github.event.pull_request.number }}" > pr_changes.json
-        ./gradlew run --args="addTestCasesToPR \"$GENERATED_TEST_CASES\" ${{ github.event.pull_request.head.ref }}"
+
+      - name: Build Shadow Jar
+        run: ./gradlew shadowJar --no-daemon
+
+      - name: Run PRTestCaseService and PRCommitService
+        env:
+          GIT_KEY_TOKEN: ${{ env.GIT_KEY_TOKEN }}
+          AI_KEY: ${{ env.AI_KEY }}
+        run: java -cp build/libs/ActionInAction-0.0.1-SNAPSHOT.jar org.example.ai.PRTestCaseService
+          ${{ github.repository_owner }}
+          ${{ github.event.repository.name }}
+          ${{ github.event.pull_request.number }}

@@ -10,28 +10,31 @@ import org.springframework.web.client.RestTemplate;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
 @Service
 public class PRTestCaseService {
 
-    private static final String GITHUB_API_URL = "https://api.github.com/repos/lalith-chennupati/ActionInAction/pulls/1/files";
+    private static final String GITHUB_API_URL = "https://api.github.com/repos/lalith-chennupati/ActionInAction/pulls/";
     private static final String AI_API_URL = "https://api.openai.com/v1/chat/completions";
-    private static final String GITHUB_TOKEN = System.getenv("GIT_TOKEN");
-    private static final String AI_API_KEY = System.getenv("AI_API_KEY");
+    private static final String ENCODE_GITHUB_TOKEN = System.getenv("GIT_KEY_TOKEN");
+    private static final String ENCODE_AI_KEY = System.getenv("AI_KEY");
 
     public List<String> fetchPRChanges(String owner, String repo, int prNumber) {
-        RestTemplate restTemplate = new RestTemplate();
+        System.out.println("Encoded GIT TOKEN : " + ENCODE_GITHUB_TOKEN);
+        System.out.println("Decoded GIT TOKEN : " + "Bearer "+ decodeToken(ENCODE_GITHUB_TOKEN));
 
+        RestTemplate restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + GITHUB_TOKEN);
+        headers.set("Authorization", "Bearer " + decodeToken(ENCODE_GITHUB_TOKEN));
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON)); // Fixed here
 
         HttpEntity<String> request = new HttpEntity<>(headers);
-
+        String gitUrl = GITHUB_API_URL+prNumber+"/files";
         ResponseEntity<String> response = restTemplate.exchange(
-                GITHUB_API_URL,
+                gitUrl,
                 HttpMethod.GET,
                 request,
                 String.class
@@ -63,9 +66,10 @@ public class PRTestCaseService {
     }
 
     private String fetchFileContent(String contentsUrl) {
+
         RestTemplate restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + GITHUB_TOKEN);
+        headers.set("Authorization", "Bearer " + decodeToken(ENCODE_GITHUB_TOKEN));
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
 
         HttpEntity<String> request = new HttpEntity<>(headers);
@@ -101,7 +105,7 @@ public class PRTestCaseService {
     public String generateTestCases(String codeSnippet) {
         RestTemplate restTemplate = new RestTemplate();
 
-        String userPrompt = "Generate JUnit test cases with 100% code coverage and 100% condition coverage for the following Java class. Do not include any explanations or additional information or any additional message in content filed:\n" + codeSnippet;
+        String userPrompt = "Generate JUnit test cases using JUNIT5 and jakartaee10 with MockitoExtension with 100% code coverage and 100% condition coverage for the following Java class. Only provide the code, no explanations or markdown formatting:\n" + codeSnippet;
         try {
             // Use ObjectMapper to construct the JSON payload
             ObjectMapper objectMapper = new ObjectMapper();
@@ -112,7 +116,7 @@ public class PRTestCaseService {
 
             ObjectNode systemMessage = objectMapper.createObjectNode();
             systemMessage.put("role", "system");
-            systemMessage.put("content", "You are a helpful assistant.");
+            systemMessage.put("content", "You provide Java code as plain text without markdown, triple backticks, or any other formatting. Only pure Java code should be returned.");
 
             ObjectNode userMessage = objectMapper.createObjectNode();
             userMessage.put("role", "user");
@@ -121,7 +125,7 @@ public class PRTestCaseService {
             payload.putArray("messages").add(systemMessage).add(userMessage);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", "Bearer " + AI_API_KEY);
+            headers.set("Authorization", "Bearer " + decodeToken(ENCODE_AI_KEY));
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             HttpEntity<String> request = new HttpEntity<>(objectMapper.writeValueAsString(payload), headers);
@@ -163,14 +167,36 @@ public class PRTestCaseService {
             }
         });
     }
-    /*public static void main(String[] args) {
+    public String decodeToken(String encodedToken) {
+        return new String(Base64.getDecoder().decode(encodedToken));
+    }
+
+    public static void main(String[] args) {
+
+       /* if (args.length < 3) {
+            System.err.println("Usage: java PRTestCaseService <owner> <repo> <prNumber>");
+            return;
+        }*/
+
+        String owner = null; //args[0];
+        String repo = null; //args[1];
+        int prNumber;
+
+        try {
+            prNumber = 9;// Integer.parseInt(args[2]);
+        } catch (NumberFormatException e) {
+            System.err.println("Invalid PR number: " + args[2]);
+            return;
+        }
+
         try {
             PRTestCaseService service = new PRTestCaseService();
-            service.generateTestClassesForEachFile("owner", "repo", 1);
-        }catch(Exception e){
-            System.err.println("Error: " + e);
+            service.generateTestClassesForEachFile(owner, repo, prNumber);
+        } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
         }
-         System.out.println("COMPLETED");
-    }*/
+
+        System.out.println("COMPLETED");
+    }
 }
 
